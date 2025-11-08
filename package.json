@@ -1,5 +1,5 @@
 {
-  "name": "@stabgan/openrouter-mcp-multimodal",
+  "name": "@hoangdn3/mcp-vision-fallback",
   "version": "1.5.0",
   "description": "MCP server for OpenRouter providing text chat and image analysis tools",
   "type": "module",
@@ -46,7 +46,9 @@
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "node-fetch": "^3.3.2",
-    "openai": "^6.8.1",
+    "openai": "^6.8.1"
+  },
+  "optionalDependencies": {
     "sharp": "^0.34.5"
   },
   "devDependencies": {
