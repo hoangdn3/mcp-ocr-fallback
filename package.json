@@ -1,14 +1,20 @@
 {
-  "name": "@hoangdn3/openrouter-mcp-multimodal",
-  "version": "1.5.1",
+  "name": "@stabgan/openrouter-mcp-multimodal",
+  "version": "1.5.0",
   "description": "MCP server for OpenRouter providing text chat and image analysis tools",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "openrouter-multimodal": "dist/index.js"
   },
-    "scripts": {
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
     "start": "node dist/index.js",
     "watch": "tsc --watch",
     "examples": "node examples/index.js",
@@ -27,12 +33,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hoangdn3/mcp-ocr-fallback.git"
+    "url": "git+https://github.com/stabgan/openrouter-mcp-multimodal.git"
   },
   "bugs": {
-    "url": "https://github.com/hoangdn3/mcp-ocr-fallback/issues"
+    "url": "https://github.com/stabgan/openrouter-mcp-multimodal/issues"
   },
-  "homepage": "https://github.com/hoangdn3/mcp-ocr-fallback#readme",
+  "homepage": "https://github.com/stabgan/openrouter-mcp-multimodal#readme",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -41,9 +47,7 @@
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "node-fetch": "^3.3.2",
-    "openai": "^6.8.1"
-  },
-  "optionalDependencies": {
+    "openai": "^6.8.1",
     "sharp": "^0.34.5"
   },
   "devDependencies": {

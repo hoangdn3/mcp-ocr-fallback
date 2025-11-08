@@ -6,7 +6,7 @@ import OpenAI from 'openai';
 import { findSuitableFreeModel } from './multi-image-analysis.js';
 
 // Default model for image analysis
-const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct:free';
+const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
 
 let sharp: any;
 try {
@@ -317,15 +317,8 @@ export async function handleAnalyzeImage(
     // 3. Default free vision model (qwen/qwen2.5-vl-32b-instruct:free)
     let model = args.model || defaultModel || DEFAULT_FREE_MODEL;
     
-    // If a model is specified but not our default free model, verify it exists
-    if (model !== DEFAULT_FREE_MODEL) {
-      try {
-        await openai.models.retrieve(model);
-      } catch (error) {
-        console.error(`Specified model ${model} not found, falling back to auto-selection`);
-        model = await findSuitableFreeModel(openai);
-      }
-    }
+    // Skip model validation - let OpenRouter API handle it directly
+    // The retrieve() endpoint is unreliable for checking model availability
     
     console.error(`Making API call with model: ${model}`);
     

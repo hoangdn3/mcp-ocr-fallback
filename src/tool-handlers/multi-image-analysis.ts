@@ -30,7 +30,7 @@ try {
 }
 
 // Default model for image analysis
-const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct:free';
+const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
 
 // Image processing constants
 const MAX_DIMENSION = 800;
@@ -274,19 +274,8 @@ async function processImage(buffer: Buffer, mimeType: string): Promise<string> {
  */
 export async function findSuitableFreeModel(openai: OpenAI): Promise<string> {
   try {
-    // First try with an exact match for our preferred model
-    const preferredModel = DEFAULT_FREE_MODEL;
-    
-    try {
-      // Check if our preferred model is available 
-      const modelInfo = await openai.models.retrieve(preferredModel);
-      if (modelInfo && modelInfo.id) {
-        console.error(`Using preferred model: ${preferredModel}`);
-        return preferredModel;
-      }
-    } catch (error) {
-      console.error(`Preferred model ${preferredModel} not available, searching for alternatives...`);
-    }
+    // Try default model first
+    console.error(`Preferred model ${DEFAULT_FREE_MODEL} not available, searching for alternatives...`);
     
     // Query available models
     const modelsResponse = await openai.models.list();
@@ -295,7 +284,7 @@ export async function findSuitableFreeModel(openai: OpenAI): Promise<string> {
       return DEFAULT_FREE_MODEL;
     }
     
-    // First, try to find free vision models
+    // Search for free vision models
     const freeVisionModels = modelsResponse.data
       .filter(model => {
         const modelId = model.id.toLowerCase();
@@ -331,7 +320,7 @@ export async function findSuitableFreeModel(openai: OpenAI): Promise<string> {
       return selectedModel;
     }
     
-    // If no free vision models found, fallback to our default
+    // If no free vision models found, fallback to default
     console.error('No free vision models found, using default fallback model');
     return DEFAULT_FREE_MODEL;
   } catch (error) {

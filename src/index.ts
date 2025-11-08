@@ -6,7 +6,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ToolHandlers } from './tool-handlers.js';
 
 // Define the default model to use when none is specified
-const DEFAULT_MODEL = 'qwen/qwen2.5-vl-32b-instruct:free';
+const DEFAULT_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
 
 interface ServerOptions {
   apiKey?: string;
