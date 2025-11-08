@@ -18,7 +18,7 @@ node_modules/
 .eslintcache
 
 # Build outputs
-dist
+# dist
 build
 
 # dotenv environment variables file
