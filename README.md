@@ -6,6 +6,10 @@
 
 An MCP (Model Context Protocol) server that provides chat and image analysis capabilities through OpenRouter.ai's diverse model ecosystem. This server combines text chat functionality with powerful image analysis capabilities.
 
+<a href="https://glama.ai/mcp/servers/@hoangdn3/mcp-ocr-fallback">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@hoangdn3/mcp-ocr-fallback/badge" alt="OpenRouter Multimodal Server MCP server" />
+</a>
+
 ## Features
 
 - **Text Chat:**
