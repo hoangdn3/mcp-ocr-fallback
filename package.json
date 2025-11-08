@@ -14,7 +14,6 @@
   ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
-    "prepare": "npm run build",
     "start": "node dist/index.js",
     "watch": "tsc --watch",
     "examples": "node examples/index.js",
@@ -33,12 +32,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stabgan/openrouter-mcp-multimodal.git"
+    "url": "git+https://github.com/hoangdn3/mcp-ocr-fallback.git"
   },
   "bugs": {
-    "url": "https://github.com/stabgan/openrouter-mcp-multimodal/issues"
+    "url": "https://github.com/hoangdn3/mcp-ocr-fallback/issues"
   },
-  "homepage": "https://github.com/stabgan/openrouter-mcp-multimodal#readme",
+  "homepage": "https://github.com/hoangdn3/mcp-ocr-fallback#readme",
   "engines": {
     "node": ">=18.0.0"
   },
