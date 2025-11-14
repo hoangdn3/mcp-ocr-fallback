@@ -15,7 +15,7 @@ export class OpenRouterAPIClient {
             headers: {
                 'Authorization': `Bearer ${this.apiKey}`,
                 'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://github.com/stabgan/openrouter-mcp-multimodal',
+                'HTTP-Referer': 'https://github.com/hoangdn3/mcp-ocr-fallback',
                 'X-Title': 'OpenRouter MCP Multimodal Server'
             },
             timeout: 60000 // 60 seconds timeout

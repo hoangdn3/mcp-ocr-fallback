@@ -39,9 +39,10 @@ RUN npx tsc && \
 # Switch to production for runtime
 ENV NODE_ENV=production
 
-# The API key should be passed at runtime
+# The API key and model should be passed at runtime
 # ENV OPENROUTER_API_KEY=your-api-key-here
-# ENV OPENROUTER_DEFAULT_MODEL=your-default-model
+# ENV OPENROUTER_DEFAULT_MODEL_IMG=your-default-image-model
+# ENV OPENROUTER_DEFAULT_MODEL_IMG_BACKUP=your-backup-image-model
 
 # Run the server
 CMD ["node", "dist/index.js"]

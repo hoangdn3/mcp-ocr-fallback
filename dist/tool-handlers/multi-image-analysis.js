@@ -7,28 +7,35 @@ import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 // Remove uuid import as we'll use a simple random string generator instead
 // import { v4 as uuidv4 } from 'uuid';
-// Setup sharp with fallback
-let sharp;
-try {
-    sharp = require('sharp');
-}
-catch (e) {
-    console.error('Warning: sharp module not available, using fallback image processing');
-    // Mock implementation that just passes through the base64 data
-    sharp = (buffer) => ({
-        metadata: async () => ({ width: 800, height: 600 }),
-        resize: () => ({
+// Lazy load sharp module
+let sharp = null;
+let sharpLoadAttempted = false;
+export async function getSharp() {
+    if (sharpLoadAttempted)
+        return sharp;
+    sharpLoadAttempted = true;
+    try {
+        const sharpModule = await import('sharp');
+        sharp = sharpModule.default;
+    }
+    catch (e) {
+        // Fallback: mock implementation
+        sharp = (buffer) => ({
+            metadata: async () => ({ width: 800, height: 600 }),
+            resize: () => ({
+                jpeg: () => ({
+                    toBuffer: async () => buffer
+                })
+            }),
             jpeg: () => ({
                 toBuffer: async () => buffer
             })
-        }),
-        jpeg: () => ({
-            toBuffer: async () => buffer
-        })
-    });
+        });
+    }
+    return sharp;
 }
 // Default model for image analysis
-const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct:free';
+const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
 // Image processing constants
 const MAX_DIMENSION = 800;
 const JPEG_QUALITY = 80;
@@ -182,7 +189,9 @@ function processImageFallback(buffer, mimeType) {
  */
 async function processImage(buffer, mimeType) {
     try {
-        if (typeof sharp !== 'function') {
+        // Load sharp dynamically
+        const sharpLib = await getSharp();
+        if (typeof sharpLib !== 'function') {
             console.warn('Using fallback image processing (sharp not available)');
             return processImageFallback(buffer, mimeType);
         }
@@ -190,7 +199,7 @@ async function processImage(buffer, mimeType) {
         const tempDir = path.join(tmpdir(), `openrouter-mcp-${generateRandomId()}`);
         await fs.mkdir(tempDir, { recursive: true });
         // Get image info
-        let sharpInstance = sharp(buffer);
+        let sharpInstance = sharpLib(buffer);
         let metadata;
         try {
             metadata = await sharpInstance.metadata();
@@ -216,17 +225,11 @@ async function processImage(buffer, mimeType) {
                 sharpInstance = sharpInstance.resize(resizeOptions);
             }
         }
-        try {
-            // Convert to JPEG for consistency and small size
-            const processedBuffer = await sharpInstance
-                .jpeg({ quality: JPEG_QUALITY })
-                .toBuffer();
-            return processedBuffer.toString('base64');
-        }
-        catch (error) {
-            console.warn('Error in final image processing, using fallback:', error);
-            return processImageFallback(buffer, mimeType);
-        }
+        // Convert to JPEG for consistency and small size
+        const processedBuffer = await sharpInstance
+            .jpeg({ quality: JPEG_QUALITY })
+            .toBuffer();
+        return processedBuffer.toString('base64');
     }
     catch (error) {
         console.error('Error processing image, using fallback:', error);
@@ -237,27 +240,17 @@ async function processImage(buffer, mimeType) {
  * Find a suitable free model with vision capabilities, defaulting to Qwen
  */
 export async function findSuitableFreeModel(openai) {
+    // Get fallback model from env backup or constant
+    const fallbackModel = process.env.OPENROUTER_DEFAULT_MODEL_IMG_BACKUP || DEFAULT_FREE_MODEL;
     try {
-        // First try with an exact match for our preferred model
-        const preferredModel = DEFAULT_FREE_MODEL;
-        try {
-            // Check if our preferred model is available 
-            const modelInfo = await openai.models.retrieve(preferredModel);
-            if (modelInfo && modelInfo.id) {
-                console.error(`Using preferred model: ${preferredModel}`);
-                return preferredModel;
-            }
-        }
-        catch (error) {
-            console.error(`Preferred model ${preferredModel} not available, searching for alternatives...`);
-        }
+        console.error(`Preferred model not available, searching for alternatives...`);
         // Query available models
         const modelsResponse = await openai.models.list();
         if (!modelsResponse?.data || modelsResponse.data.length === 0) {
-            console.error('No models found, using default fallback model');
-            return DEFAULT_FREE_MODEL;
+            console.error(`No models found, using fallback: ${fallbackModel}`);
+            return fallbackModel;
         }
-        // First, try to find free vision models
+        // Search for free vision models
         const freeVisionModels = modelsResponse.data
             .filter(model => {
             const modelId = model.id.toLowerCase();
@@ -292,13 +285,13 @@ export async function findSuitableFreeModel(openai) {
             console.error(`Selected free vision model: ${selectedModel} with context length: ${freeVisionModels[0].contextLength}`);
             return selectedModel;
         }
-        // If no free vision models found, fallback to our default
-        console.error('No free vision models found, using default fallback model');
-        return DEFAULT_FREE_MODEL;
+        // If no free vision models found, use fallback
+        console.error(`No free vision models found, using fallback: ${fallbackModel}`);
+        return fallbackModel;
     }
     catch (error) {
-        console.error('Error finding suitable model:', error);
-        return DEFAULT_FREE_MODEL;
+        console.error(`Error finding suitable model: ${error}, using fallback: ${fallbackModel}`);
+        return fallbackModel;
     }
 }
 /**
@@ -342,19 +335,8 @@ export async function handleMultiImageAnalysis(request, openai, defaultModel) {
         // Select model with priority:
         // 1. User-specified model
         // 2. Default model from environment
-        // 3. Default free vision model
         let model = args.model || defaultModel || DEFAULT_FREE_MODEL;
-        // If a model is specified but not our default free model, verify it exists
-        if (model !== DEFAULT_FREE_MODEL) {
-            try {
-                await openai.models.retrieve(model);
-            }
-            catch (error) {
-                console.error(`Specified model ${model} not found, falling back to auto-selection`);
-                model = await findSuitableFreeModel(openai);
-            }
-        }
-        console.error(`Making API call with model: ${model}`);
+        console.error(`[Multi-Image Tool] Using IMAGE model: ${model}`);
         // Build content array for the API call
         const content = [
             {
@@ -371,16 +353,83 @@ export async function handleMultiImageAnalysis(request, openai, defaultModel) {
                 }
             });
         });
-        // Make the API call
-        const completion = await openai.chat.completions.create({
-            model,
-            messages: [{
-                    role: 'user',
-                    content
-                }]
-        });
-        // Get response text and format if requested
-        let responseText = completion.choices[0].message.content || '';
+        // Try primary model first
+        let responseText;
+        let usedModel;
+        let usage;
+        try {
+            const completion = await openai.chat.completions.create({
+                model,
+                messages: [{
+                        role: 'user',
+                        content
+                    }]
+            });
+            responseText = completion.choices[0].message.content || '';
+            usedModel = completion.model;
+            usage = completion.usage;
+        }
+        catch (primaryError) {
+            // If primary model fails and backup exists, try backup
+            const backupModel = process.env.OPENROUTER_DEFAULT_MODEL_IMG_BACKUP;
+            if (backupModel && backupModel !== model) {
+                try {
+                    console.error(`Primary model failed, trying backup: ${backupModel}`);
+                    const completion = await openai.chat.completions.create({
+                        model: backupModel,
+                        messages: [{
+                                role: 'user',
+                                content
+                            }]
+                    });
+                    responseText = completion.choices[0].message.content || '';
+                    usedModel = completion.model;
+                    usage = completion.usage;
+                }
+                catch (backupError) {
+                    console.error(`Backup model failed, searching for free models...`);
+                    // Try to find a free model
+                    const freeModel = await findSuitableFreeModel(openai);
+                    if (freeModel && freeModel !== model && freeModel !== backupModel) {
+                        console.error(`Trying free model: ${freeModel}`);
+                        const completion = await openai.chat.completions.create({
+                            model: freeModel,
+                            messages: [{
+                                    role: 'user',
+                                    content
+                                }]
+                        });
+                        responseText = completion.choices[0].message.content || '';
+                        usedModel = completion.model;
+                        usage = completion.usage;
+                    }
+                    else {
+                        throw backupError;
+                    }
+                }
+            }
+            else {
+                // No backup, try free model directly
+                console.error(`Primary model failed, searching for free models...`);
+                const freeModel = await findSuitableFreeModel(openai);
+                if (freeModel && freeModel !== model) {
+                    console.error(`Trying free model: ${freeModel}`);
+                    const completion = await openai.chat.completions.create({
+                        model: freeModel,
+                        messages: [{
+                                role: 'user',
+                                content
+                            }]
+                    });
+                    responseText = completion.choices[0].message.content || '';
+                    usedModel = completion.model;
+                    usage = completion.usage;
+                }
+                else {
+                    throw primaryError;
+                }
+            }
+        }
         // Format as markdown if requested
         if (args.markdown_response) {
             // Simple formatting enhancements
@@ -401,8 +450,8 @@ export async function handleMultiImageAnalysis(request, openai, defaultModel) {
                 },
             ],
             metadata: {
-                model: completion.model,
-                usage: completion.usage
+                model: usedModel,
+                usage: usage
             }
         };
     }

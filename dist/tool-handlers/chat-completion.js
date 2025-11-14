@@ -132,6 +132,10 @@ export async function handleChatCompletion(request, openai, defaultModel) {
                     text: completion.choices[0].message.content || '',
                 },
             ],
+            metadata: {
+                model: completion.model,
+                usage: completion.usage
+            }
         };
     }
     catch (error) {

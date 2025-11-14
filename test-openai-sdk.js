@@ -60,7 +60,7 @@ async function analyzeImageWithOpenRouter(base64Image, question = "What's in thi
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: 'https://openrouter.ai/api/v1',
       defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/stabgan/openrouter-mcp-multimodal',
+        'HTTP-Referer': 'https://github.com/hoangdn3/mcp-ocr-fallback',
         'X-Title': 'OpenRouter MCP Test'
       }
     });

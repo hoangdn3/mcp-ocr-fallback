@@ -5,10 +5,15 @@ export declare class ToolHandlers {
     private modelCache;
     private apiClient;
     private defaultModel?;
-    constructor(server: Server, apiKey: string, defaultModel?: string);
+    private defaultAudioModel?;
+    constructor(server: Server, apiKey: string, defaultModel?: string, defaultAudioModel?: string);
     private setupToolHandlers;
     /**
      * Get the default model configured for this server
      */
     getDefaultModel(): string | undefined;
+    /**
+     * Get the default audio model configured for this server
+     */
+    getDefaultAudioModel(): string | undefined;
 }

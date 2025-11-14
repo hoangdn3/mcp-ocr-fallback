@@ -3,29 +3,10 @@ import { promises as fs } from 'fs';
 import fetch from 'node-fetch';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import OpenAI from 'openai';
-import { findSuitableFreeModel } from './multi-image-analysis.js';
+import { findSuitableFreeModel, getSharp } from './multi-image-analysis.js';
 
 // Default model for image analysis
 const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
-
-let sharp: any;
-try {
-  sharp = require('sharp');
-} catch (e) {
-  console.error('Warning: sharp module not available, using fallback image processing');
-  // Mock implementation that just passes through the base64 data
-  sharp = (buffer: Buffer) => ({
-    metadata: async () => ({ width: 800, height: 600 }),
-    resize: () => ({
-      jpeg: () => ({
-        toBuffer: async () => buffer
-      })
-    }),
-    jpeg: () => ({
-      toBuffer: async () => buffer
-    })
-  });
-}
 
 export interface AnalyzeImageToolRequest {
   image_path: string;
@@ -120,7 +101,9 @@ async function processImageFallback(buffer: Buffer): Promise<string> {
 
 async function processImage(buffer: Buffer): Promise<string> {
   try {
-    if (typeof sharp !== 'function') {
+    // Load sharp dynamically
+    const sharpLib = await getSharp();
+    if (typeof sharpLib !== 'function') {
       console.warn('Using fallback image processing (sharp not available)');
       return processImageFallback(buffer);
     }
@@ -128,7 +111,7 @@ async function processImage(buffer: Buffer): Promise<string> {
     // Get image metadata
     let metadata;
     try {
-      metadata = await sharp(buffer).metadata();
+      metadata = await sharpLib(buffer).metadata();
     } catch (error) {
       console.warn('Error getting image metadata, using fallback:', error);
       return processImageFallback(buffer);
@@ -145,7 +128,7 @@ async function processImage(buffer: Buffer): Promise<string> {
           ? { width: MAX_DIMENSION }
           : { height: MAX_DIMENSION };
         
-        const resizedBuffer = await sharp(buffer)
+        const resizedBuffer = await sharpLib(buffer)
           .resize(resizeOptions)
           .jpeg({ quality: JPEG_QUALITY })
           .toBuffer();
@@ -155,7 +138,7 @@ async function processImage(buffer: Buffer): Promise<string> {
     }
     
     // If no resizing needed, just convert to JPEG
-    const jpegBuffer = await sharp(buffer)
+    const jpegBuffer = await sharpLib(buffer)
       .jpeg({ quality: JPEG_QUALITY })
       .toBuffer();
     
@@ -313,37 +296,96 @@ export async function handleAnalyzeImage(
     
     // Select model with priority:
     // 1. User-specified model
-    // 2. Default model from environment
-    // 3. Default free vision model (qwen/qwen2.5-vl-32b-instruct:free)
+    // 2. Default model from environment (OPENROUTER_DEFAULT_MODEL_IMG)
     let model = args.model || defaultModel || DEFAULT_FREE_MODEL;
+    console.error(`[Image Tool] Using IMAGE model: ${model}`);
     
-    // Skip model validation - let OpenRouter API handle it directly
-    // The retrieve() endpoint is unreliable for checking model availability
-    
-    console.error(`Making API call with model: ${model}`);
-    
-    // Make the API call
-    const completion = await openai.chat.completions.create({
-      model,
-      messages: [{
-        role: 'user',
-        content
-      }] as any
-    });
-    
-    // Return the analysis result
-    return {
-      content: [
-        {
-          type: 'text',
-          text: completion.choices[0].message.content || '',
-        },
-      ],
-      metadata: {
-        model: completion.model,
-        usage: completion.usage
+    // Try primary model first
+    try {
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: [{
+          role: 'user',
+          content
+        }] as any
+      });
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: completion.choices[0].message.content || '',
+          },
+        ],
+        metadata: {
+          model: completion.model,
+          usage: completion.usage
+        }
+      };
+    } catch (primaryError: any) {
+      // If primary model fails and backup exists, try backup
+      const backupModel = process.env.OPENROUTER_DEFAULT_MODEL_IMG_BACKUP;
+      if (backupModel && backupModel !== model) {
+        try {
+          console.error(`Primary model failed, trying backup: ${backupModel}`);
+          const completion = await openai.chat.completions.create({
+            model: backupModel,
+            messages: [{
+              role: 'user',
+              content
+            }] as any
+          });
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: completion.choices[0].message.content || '',
+              },
+            ],
+            metadata: {
+              model: completion.model,
+              usage: completion.usage
+            }
+          };
+        } catch (backupError: any) {
+          console.error(`Backup model failed, searching for free models...`);
+        }
       }
-    };
+      
+      // If both failed or no backup, try to find a free model
+      try {
+        const freeModel = await findSuitableFreeModel(openai);
+        if (freeModel && freeModel !== model && freeModel !== backupModel) {
+          console.error(`Trying free model: ${freeModel}`);
+          const completion = await openai.chat.completions.create({
+            model: freeModel,
+            messages: [{
+              role: 'user',
+              content
+            }] as any
+          });
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: completion.choices[0].message.content || '',
+              },
+            ],
+            metadata: {
+              model: completion.model,
+              usage: completion.usage
+            }
+          };
+        }
+      } catch (freeModelError: any) {
+        console.error(`Free model search failed: ${freeModelError.message}`);
+      }
+      
+      // All attempts failed, throw the original error
+      throw primaryError;
+    }
   } catch (error) {
     console.error('Error in image analysis:', error);
     

@@ -163,6 +163,10 @@ export async function handleChatCompletion(
           text: completion.choices[0].message.content || '',
         },
       ],
+      metadata: {
+        model: completion.model,
+        usage: completion.usage
+      }
     };
   } catch (error) {
     if (error instanceof Error) {

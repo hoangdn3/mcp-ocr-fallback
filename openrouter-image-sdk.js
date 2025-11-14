@@ -128,7 +128,7 @@ export async function analyzeImage({
     apiKey: openrouterApiKey,
     baseURL: 'https://openrouter.ai/api/v1',
     defaultHeaders: {
-      'HTTP-Referer': 'https://github.com/stabgan/openrouter-mcp-multimodal',
+      'HTTP-Referer': 'https://github.com/hoangdn3/mcp-ocr-fallback',
       'X-Title': 'OpenRouter Local Image Analysis'
     }
   });

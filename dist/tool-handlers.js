@@ -9,22 +9,25 @@ import { handleGetModelInfo } from './tool-handlers/get-model-info.js';
 import { handleValidateModel } from './tool-handlers/validate-model.js';
 import { handleMultiImageAnalysis } from './tool-handlers/multi-image-analysis.js';
 import { handleAnalyzeImage } from './tool-handlers/analyze-image.js';
+import { handleAnalyzeAudio } from './tool-handlers/analyze-audio.js';
 export class ToolHandlers {
     server;
     openai;
     modelCache;
     apiClient;
     defaultModel;
-    constructor(server, apiKey, defaultModel) {
+    defaultAudioModel;
+    constructor(server, apiKey, defaultModel, defaultAudioModel) {
         this.server = server;
         this.modelCache = ModelCache.getInstance();
         this.apiClient = new OpenRouterAPIClient(apiKey);
         this.defaultModel = defaultModel;
+        this.defaultAudioModel = defaultAudioModel;
         this.openai = new OpenAI({
             apiKey: apiKey,
             baseURL: 'https://openrouter.ai/api/v1',
             defaultHeaders: {
-                'HTTP-Referer': 'https://github.com/stabgan/openrouter-mcp-multimodal',
+                'HTTP-Referer': 'https://github.com/hoangdn3/mcp-ocr-fallback',
                 'X-Title': 'OpenRouter MCP Multimodal Server',
             },
         });
@@ -175,6 +178,25 @@ export class ToolHandlers {
                         required: ['images', 'prompt'],
                     },
                 },
+                // Audio Analysis Tool
+                {
+                    name: 'mcp_openrouter_analyze_audio',
+                    description: 'Transcribe audio files and provide raw content. Supports wav/mp3 files from CDN URLs or local paths.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            audio_url: {
+                                type: 'string',
+                                description: 'Path or URL to the audio file (supports CDN URLs, local file paths, wav/mp3 formats)',
+                            },
+                            model: {
+                                type: 'string',
+                                description: 'OpenRouter model to use (e.g., "mistralai/voxtral-small-24b-2507", "openai/gpt-4o-audio-preview")',
+                            },
+                        },
+                        required: ['audio_url'],
+                    },
+                },
                 // Search Models Tool
                 {
                     name: 'search_models',
@@ -289,6 +311,12 @@ export class ToolHandlers {
                             arguments: request.params.arguments
                         }
                     }, this.openai, this.defaultModel);
+                case 'mcp_openrouter_analyze_audio':
+                    return handleAnalyzeAudio({
+                        params: {
+                            arguments: request.params.arguments
+                        }
+                    }, this.openai, this.defaultAudioModel);
                 case 'search_models':
                     return handleSearchModels({
                         params: {
@@ -317,6 +345,12 @@ export class ToolHandlers {
      */
     getDefaultModel() {
         return this.defaultModel;
+    }
+    /**
+     * Get the default audio model configured for this server
+     */
+    getDefaultAudioModel() {
+        return this.defaultAudioModel;
     }
 }
 //# sourceMappingURL=tool-handlers.js.map

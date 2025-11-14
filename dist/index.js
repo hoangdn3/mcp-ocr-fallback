@@ -4,14 +4,16 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ToolHandlers } from './tool-handlers.js';
 // Define the default model to use when none is specified
-const DEFAULT_MODEL = 'qwen/qwen2.5-vl-32b-instruct:free';
+const DEFAULT_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
+const DEFAULT_AUDIO_MODEL = 'mistralai/voxtral-small-24b-2507';
 class OpenRouterMultimodalServer {
     server;
     toolHandlers; // Using definite assignment assertion
     constructor(options) {
         // Retrieve API key from options or environment variables
         const apiKey = options?.apiKey || process.env.OPENROUTER_API_KEY;
-        const defaultModel = options?.defaultModel || process.env.OPENROUTER_DEFAULT_MODEL || DEFAULT_MODEL;
+        const defaultModel = options?.defaultModel || process.env.OPENROUTER_DEFAULT_MODEL_IMG || process.env.OPENROUTER_DEFAULT_MODEL_IMG_BACKUP || DEFAULT_MODEL;
+        const defaultAudioModel = options?.defaultAudioModel || process.env.OPENROUTER_DEFAULT_MODEL_AUDIO || process.env.OPENROUTER_DEFAULT_MODEL_AUDIO_BACKUP || DEFAULT_AUDIO_MODEL;
         // Check if API key is provided
         if (!apiKey) {
             throw new Error('OpenRouter API key is required. Provide it via options or OPENROUTER_API_KEY environment variable');
@@ -28,7 +30,7 @@ class OpenRouterMultimodalServer {
         // Set up error handling
         this.server.onerror = (error) => console.error('[MCP Error]', error);
         // Initialize tool handlers
-        this.toolHandlers = new ToolHandlers(this.server, apiKey, defaultModel);
+        this.toolHandlers = new ToolHandlers(this.server, apiKey, defaultModel, defaultAudioModel);
         process.on('SIGINT', async () => {
             await this.server.close();
             process.exit(0);
@@ -38,9 +40,6 @@ class OpenRouterMultimodalServer {
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
         console.error('OpenRouter Multimodal MCP server running on stdio');
-        // Log model information
-        const modelDisplay = this.toolHandlers.getDefaultModel() || DEFAULT_MODEL;
-        console.error(`Using default model: ${modelDisplay}`);
         console.error('Server is ready to process tool calls. Waiting for input...');
     }
 }

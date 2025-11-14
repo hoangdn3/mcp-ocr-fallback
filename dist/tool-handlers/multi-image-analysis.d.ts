@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+export declare function getSharp(): Promise<any>;
 export interface MultiImageAnalysisToolRequest {
     images: Array<{
         url: string;
@@ -26,7 +27,7 @@ export declare function handleMultiImageAnalysis(request: {
     }[];
     metadata: {
         model: string;
-        usage: OpenAI.Completions.CompletionUsage | undefined;
+        usage: any;
         error_type?: undefined;
         error_message?: undefined;
     };

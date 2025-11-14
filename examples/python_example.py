@@ -48,7 +48,7 @@ MODEL = "anthropic/claude-3-5-sonnet"
 # Configuration for the MCP server
 SERVER_CONFIG = {
     "command": "npx",
-    "args": ["-y", "@stabgan/openrouter-mcp-multimodal"],
+    "args": ["-y", "@hoangdn3/openrouter-mcp-multimodal"],
     "env": {"OPENROUTER_API_KEY": API_KEY}
 }
 

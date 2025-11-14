@@ -2,28 +2,9 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import fetch from 'node-fetch';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { findSuitableFreeModel } from './multi-image-analysis.js';
+import { findSuitableFreeModel, getSharp } from './multi-image-analysis.js';
 // Default model for image analysis
-const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct:free';
-let sharp;
-try {
-    sharp = require('sharp');
-}
-catch (e) {
-    console.error('Warning: sharp module not available, using fallback image processing');
-    // Mock implementation that just passes through the base64 data
-    sharp = (buffer) => ({
-        metadata: async () => ({ width: 800, height: 600 }),
-        resize: () => ({
-            jpeg: () => ({
-                toBuffer: async () => buffer
-            })
-        }),
-        jpeg: () => ({
-            toBuffer: async () => buffer
-        })
-    });
-}
+const DEFAULT_FREE_MODEL = 'qwen/qwen2.5-vl-32b-instruct';
 /**
  * Normalizes a file path to be OS-neutral
  * Handles Windows backslashes, drive letters, etc.
@@ -105,14 +86,16 @@ async function processImageFallback(buffer) {
 }
 async function processImage(buffer) {
     try {
-        if (typeof sharp !== 'function') {
+        // Load sharp dynamically
+        const sharpLib = await getSharp();
+        if (typeof sharpLib !== 'function') {
             console.warn('Using fallback image processing (sharp not available)');
             return processImageFallback(buffer);
         }
         // Get image metadata
         let metadata;
         try {
-            metadata = await sharp(buffer).metadata();
+            metadata = await sharpLib(buffer).metadata();
         }
         catch (error) {
             console.warn('Error getting image metadata, using fallback:', error);
@@ -127,7 +110,7 @@ async function processImage(buffer) {
                 const resizeOptions = metadata.width > metadata.height
                     ? { width: MAX_DIMENSION }
                     : { height: MAX_DIMENSION };
-                const resizedBuffer = await sharp(buffer)
+                const resizedBuffer = await sharpLib(buffer)
                     .resize(resizeOptions)
                     .jpeg({ quality: JPEG_QUALITY })
                     .toBuffer();
@@ -135,7 +118,7 @@ async function processImage(buffer) {
             }
         }
         // If no resizing needed, just convert to JPEG
-        const jpegBuffer = await sharp(buffer)
+        const jpegBuffer = await sharpLib(buffer)
             .jpeg({ quality: JPEG_QUALITY })
             .toBuffer();
         return jpegBuffer.toString('base64');
@@ -276,41 +259,93 @@ export async function handleAnalyzeImage(request, openai, defaultModel) {
         ];
         // Select model with priority:
         // 1. User-specified model
-        // 2. Default model from environment
-        // 3. Default free vision model (qwen/qwen2.5-vl-32b-instruct:free)
+        // 2. Default model from environment (OPENROUTER_DEFAULT_MODEL_IMG)
         let model = args.model || defaultModel || DEFAULT_FREE_MODEL;
-        // If a model is specified but not our default free model, verify it exists
-        if (model !== DEFAULT_FREE_MODEL) {
-            try {
-                await openai.models.retrieve(model);
-            }
-            catch (error) {
-                console.error(`Specified model ${model} not found, falling back to auto-selection`);
-                model = await findSuitableFreeModel(openai);
-            }
+        console.error(`[Image Tool] Using IMAGE model: ${model}`);
+        // Try primary model first
+        try {
+            const completion = await openai.chat.completions.create({
+                model,
+                messages: [{
+                        role: 'user',
+                        content
+                    }]
+            });
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: completion.choices[0].message.content || '',
+                    },
+                ],
+                metadata: {
+                    model: completion.model,
+                    usage: completion.usage
+                }
+            };
         }
-        console.error(`Making API call with model: ${model}`);
-        // Make the API call
-        const completion = await openai.chat.completions.create({
-            model,
-            messages: [{
-                    role: 'user',
-                    content
-                }]
-        });
-        // Return the analysis result
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: completion.choices[0].message.content || '',
-                },
-            ],
-            metadata: {
-                model: completion.model,
-                usage: completion.usage
+        catch (primaryError) {
+            // If primary model fails and backup exists, try backup
+            const backupModel = process.env.OPENROUTER_DEFAULT_MODEL_IMG_BACKUP;
+            if (backupModel && backupModel !== model) {
+                try {
+                    console.error(`Primary model failed, trying backup: ${backupModel}`);
+                    const completion = await openai.chat.completions.create({
+                        model: backupModel,
+                        messages: [{
+                                role: 'user',
+                                content
+                            }]
+                    });
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: completion.choices[0].message.content || '',
+                            },
+                        ],
+                        metadata: {
+                            model: completion.model,
+                            usage: completion.usage
+                        }
+                    };
+                }
+                catch (backupError) {
+                    console.error(`Backup model failed, searching for free models...`);
+                }
             }
-        };
+            // If both failed or no backup, try to find a free model
+            try {
+                const freeModel = await findSuitableFreeModel(openai);
+                if (freeModel && freeModel !== model && freeModel !== backupModel) {
+                    console.error(`Trying free model: ${freeModel}`);
+                    const completion = await openai.chat.completions.create({
+                        model: freeModel,
+                        messages: [{
+                                role: 'user',
+                                content
+                            }]
+                    });
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: completion.choices[0].message.content || '',
+                            },
+                        ],
+                        metadata: {
+                            model: completion.model,
+                            usage: completion.usage
+                        }
+                    };
+                }
+            }
+            catch (freeModelError) {
+                console.error(`Free model search failed: ${freeModelError.message}`);
+            }
+            // All attempts failed, throw the original error
+            throw primaryError;
+        }
     }
     catch (error) {
         console.error('Error in image analysis:', error);

@@ -15,10 +15,15 @@ export declare function handleChatCompletion(request: {
         text: string;
     }[];
     isError: boolean;
+    metadata?: undefined;
 } | {
     content: {
         type: string;
         text: string;
     }[];
+    metadata: {
+        model: string;
+        usage: OpenAI.Completions.CompletionUsage | undefined;
+    };
     isError?: undefined;
 }>;
