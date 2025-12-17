@@ -1,6 +1,6 @@
 {
   "name": "@hoangdn3/openrouter-mcp-multimodal",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "MCP server for OpenRouter providing text chat and image analysis tools",
   "type": "module",
   "main": "dist/index.js",
