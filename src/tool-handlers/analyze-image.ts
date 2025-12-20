@@ -20,19 +20,19 @@ export interface AnalyzeImageToolRequest {
  */
 function normalizePath(filePath: string): string {
   // Skip normalization for URLs and data URLs
-  if (filePath.startsWith('http://') || 
-      filePath.startsWith('https://') || 
-      filePath.startsWith('data:')) {
+  if (filePath.startsWith('http://') ||
+    filePath.startsWith('https://') ||
+    filePath.startsWith('data:')) {
     return filePath;
   }
-  
+
   // Handle Windows paths and convert them to a format that's usable
   // First normalize the path according to the OS
   let normalized = path.normalize(filePath);
-  
+
   // Make sure any Windows backslashes are handled
   normalized = normalized.replace(/\\/g, '/');
-  
+
   return normalized;
 }
 
@@ -46,16 +46,16 @@ async function fetchImageAsBuffer(url: string): Promise<Buffer> {
       }
       return Buffer.from(matches[2], 'base64');
     }
-    
+
     // Normalize the path before proceeding
     const normalizedUrl = normalizePath(url);
-    
+
     // Handle file URLs
     if (normalizedUrl.startsWith('file://')) {
       const filePath = normalizedUrl.replace('file://', '');
       return await fs.readFile(filePath);
     }
-    
+
     // Handle http/https URLs
     if (normalizedUrl.startsWith('http://') || normalizedUrl.startsWith('https://')) {
       const response = await fetch(normalizedUrl);
@@ -64,7 +64,7 @@ async function fetchImageAsBuffer(url: string): Promise<Buffer> {
       }
       return Buffer.from(await response.arrayBuffer());
     }
-    
+
     // Handle regular file paths
     try {
       return await fs.readFile(normalizedUrl);
@@ -107,7 +107,7 @@ async function processImage(buffer: Buffer): Promise<string> {
       console.warn('Using fallback image processing (sharp not available)');
       return processImageFallback(buffer);
     }
-    
+
     // Get image metadata
     let metadata;
     try {
@@ -116,32 +116,32 @@ async function processImage(buffer: Buffer): Promise<string> {
       console.warn('Error getting image metadata, using fallback:', error);
       return processImageFallback(buffer);
     }
-    
+
     // Calculate dimensions to keep base64 size reasonable
     const MAX_DIMENSION = 800;
-    const JPEG_QUALITY = 80; 
-    
+    const JPEG_QUALITY = 80;
+
     if (metadata.width && metadata.height) {
       const largerDimension = Math.max(metadata.width, metadata.height);
       if (largerDimension > MAX_DIMENSION) {
         const resizeOptions = metadata.width > metadata.height
           ? { width: MAX_DIMENSION }
           : { height: MAX_DIMENSION };
-        
+
         const resizedBuffer = await sharpLib(buffer)
           .resize(resizeOptions)
           .jpeg({ quality: JPEG_QUALITY })
           .toBuffer();
-        
+
         return resizedBuffer.toString('base64');
       }
     }
-    
+
     // If no resizing needed, just convert to JPEG
     const jpegBuffer = await sharpLib(buffer)
       .jpeg({ quality: JPEG_QUALITY })
       .toBuffer();
-    
+
     return jpegBuffer.toString('base64');
   } catch (error) {
     console.error('Error processing image, using fallback:', error);
@@ -162,10 +162,10 @@ async function prepareImage(imagePath: string): Promise<{ base64: string; mimeTy
       }
       return { base64: matches[2], mimeType: matches[1] };
     }
-    
+
     // Normalize the path first
     const normalizedPath = normalizePath(imagePath);
-    
+
     // Check if image is a URL
     if (normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')) {
       try {
@@ -176,20 +176,20 @@ async function prepareImage(imagePath: string): Promise<{ base64: string; mimeTy
         throw new McpError(ErrorCode.InvalidParams, `Failed to fetch image from URL: ${error.message}`);
       }
     }
-    
+
     // Handle file paths
     let absolutePath = normalizedPath;
-    
+
     // For local file paths, ensure they are absolute 
     // Don't check URLs or data URIs
-    if (!normalizedPath.startsWith('data:') && 
-        !normalizedPath.startsWith('http://') && 
-        !normalizedPath.startsWith('https://')) {
-      
+    if (!normalizedPath.startsWith('data:') &&
+      !normalizedPath.startsWith('http://') &&
+      !normalizedPath.startsWith('https://')) {
+
       if (!path.isAbsolute(normalizedPath)) {
         throw new McpError(ErrorCode.InvalidParams, 'Image path must be absolute');
       }
-      
+
       // For Windows paths that include a drive letter but aren't recognized as absolute
       // by path.isAbsolute in some environments
       if (/^[A-Za-z]:/.test(normalizedPath) && !path.isAbsolute(normalizedPath)) {
@@ -222,11 +222,11 @@ async function prepareImage(imagePath: string): Promise<{ base64: string; mimeTy
         throw new McpError(ErrorCode.InvalidParams, `Failed to read file: ${absolutePath}`);
       }
     }
-    
+
     // Determine MIME type from file extension
     const extension = path.extname(absolutePath).toLowerCase();
     let mimeType: string;
-    
+
     switch (extension) {
       case '.png':
         mimeType = 'image/png';
@@ -247,7 +247,7 @@ async function prepareImage(imagePath: string): Promise<{ base64: string; mimeTy
       default:
         mimeType = 'application/octet-stream';
     }
-    
+
     // Process and optimize the image
     const processed = await processImage(buffer);
     return { base64: processed, mimeType };
@@ -266,20 +266,20 @@ export async function handleAnalyzeImage(
   defaultModel?: string
 ) {
   const args = request.params.arguments;
-  
+
   try {
     // Validate inputs
     if (!args.image_path) {
       throw new McpError(ErrorCode.InvalidParams, 'An image path, URL, or base64 data is required');
     }
-    
+
     const question = args.question || "What's in this image?";
-    
+
     console.error(`Processing image: ${args.image_path.substring(0, 100)}${args.image_path.length > 100 ? '...' : ''}`);
-    
+
     // Convert the image to base64
     const { base64, mimeType } = await prepareImage(args.image_path);
-    
+
     // Create the content array for the OpenAI API
     const content = [
       {
@@ -293,13 +293,13 @@ export async function handleAnalyzeImage(
         }
       }
     ];
-    
+
     // Select model with priority:
     // 1. User-specified model
     // 2. Default model from environment (OPENROUTER_DEFAULT_MODEL_IMG)
     let model = args.model || defaultModel || DEFAULT_FREE_MODEL;
     console.error(`[Image Tool] Using IMAGE model: ${model}`);
-    
+
     // Try primary model first
     try {
       const completion = await openai.chat.completions.create({
@@ -309,20 +309,20 @@ export async function handleAnalyzeImage(
           content
         }] as any
       });
-      
+
       const response = completion as any;
       return {
         content: [
           {
             type: 'text',
-            text: completion.choices[0].message.content || '',
+            text: JSON.stringify({
+              id: response.id,
+              analysis: completion.choices[0].message.content || '',
+              model: response.model,
+              usage: response.usage
+            }),
           },
         ],
-        metadata: {
-          id: response.id,
-          model: response.model,
-          usage: response.usage
-        }
       };
     } catch (primaryError: any) {
       // If primary model fails and backup exists, try backup
@@ -337,26 +337,26 @@ export async function handleAnalyzeImage(
               content
             }] as any
           });
-          
+
           const resp = completion as any;
           return {
             content: [
               {
                 type: 'text',
-                text: completion.choices[0].message.content || '',
+                text: JSON.stringify({
+                  id: resp.id,
+                  analysis: completion.choices[0].message.content || '',
+                  model: resp.model,
+                  usage: resp.usage
+                }),
               },
             ],
-            metadata: {
-              id: resp.id,
-              model: resp.model,
-              usage: resp.usage
-            }
           };
         } catch (backupError: any) {
           console.error(`Backup model failed, searching for free models...`);
         }
       }
-      
+
       // If both failed or no backup, try to find a free model
       try {
         const freeModel = await findSuitableFreeModel(openai);
@@ -369,48 +369,48 @@ export async function handleAnalyzeImage(
               content
             }] as any
           });
-          
+
           const resp = completion as any;
           return {
             content: [
               {
                 type: 'text',
-                text: completion.choices[0].message.content || '',
+                text: JSON.stringify({
+                  id: resp.id,
+                  analysis: completion.choices[0].message.content || '',
+                  model: resp.model,
+                  usage: resp.usage
+                }),
               },
             ],
-            metadata: {
-              id: resp.id,
-              model: resp.model,
-              usage: resp.usage
-            }
           };
         }
       } catch (freeModelError: any) {
         console.error(`Free model search failed: ${freeModelError.message}`);
       }
-      
+
       // All attempts failed, throw the original error
       throw primaryError;
     }
   } catch (error) {
     console.error('Error in image analysis:', error);
-    
+
     if (error instanceof McpError) {
       throw error;
     }
-    
+
     return {
       content: [
         {
           type: 'text',
-          text: `Error analyzing image: ${error instanceof Error ? error.message : String(error)}`,
+          text: JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+            model: args.model || defaultModel || DEFAULT_FREE_MODEL,
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+          }),
         },
       ],
       isError: true,
-      metadata: {
-        error_type: error instanceof Error ? error.constructor.name : 'Unknown',
-        error_message: error instanceof Error ? error.message : String(error)
-      }
     };
   }
 }

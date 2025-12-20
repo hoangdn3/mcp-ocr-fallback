@@ -47,11 +47,11 @@ async function fetchAudio(audioPath: string): Promise<Buffer> {
     // Read from local file
     const normalizedPath = normalizePath(audioPath);
     let resolvedPath = normalizedPath;
-    
+
     if (!path.isAbsolute(resolvedPath)) {
       resolvedPath = path.resolve(process.cwd(), resolvedPath);
     }
-    
+
     return await fs.readFile(resolvedPath);
   }
 }
@@ -67,12 +67,12 @@ function detectAudioFormat(buffer: Buffer, filename: string): 'wav' | 'mp3' {
   if (buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0) {
     return 'mp3';
   }
-  
+
   // Fallback to filename extension
   const ext = path.extname(filename).toLowerCase();
   if (ext === '.wav') return 'wav';
   if (ext === '.mp3') return 'mp3';
-  
+
   // Default to wav
   return 'wav';
 }
@@ -82,26 +82,26 @@ function detectAudioFormat(buffer: Buffer, filename: string): 'wav' | 'mp3' {
  */
 async function findSuitableFreeAudioModel(openai: OpenAI): Promise<string> {
   const fallbackModel = process.env.OPENROUTER_DEFAULT_MODEL_AUDIO_BACKUP || DEFAULT_AUDIO_MODEL;
-  
+
   try {
     const modelsResponse = await openai.models.list();
     if (!modelsResponse?.data || modelsResponse.data.length === 0) {
       return fallbackModel;
     }
-    
+
     // Search for free audio models
     const freeAudioModels = modelsResponse.data
       .filter(model => {
         const modelId = model.id.toLowerCase();
-        return modelId.includes('free') && 
-              (modelId.includes('audio') || modelId.includes('voxtral') || modelId.includes('whisper'));
+        return modelId.includes('free') &&
+          (modelId.includes('audio') || modelId.includes('voxtral') || modelId.includes('whisper'));
       })
       .map(model => ({ id: model.id }));
-    
+
     if (freeAudioModels.length > 0) {
       return freeAudioModels[0].id;
     }
-    
+
     return fallbackModel;
   } catch (error) {
     return fallbackModel;
@@ -118,7 +118,7 @@ export async function handleAnalyzeAudio(
 ): Promise<any> {
   try {
     const args = request.params.arguments;
-    
+
     // Validate input
     if (!args.audio_url) {
       throw new McpError(
@@ -126,12 +126,12 @@ export async function handleAnalyzeAudio(
         'audio_url parameter is required'
       );
     }
-    
+
     // Fetch audio
     const buffer = await fetchAudio(args.audio_url);
     const format = detectAudioFormat(buffer, args.audio_url);
     const base64 = buffer.toString('base64');
-    
+
     // Build content array
     const content: Array<{
       type: string;
@@ -141,13 +141,13 @@ export async function handleAnalyzeAudio(
         format: string;
       };
     }> = [];
-    
+
     // Add fixed transcription instruction
     content.push({
       type: 'text',
       text: 'Please transcribe and provide me the raw content of this audio.'
     });
-    
+
     // Add audio
     content.push({
       type: 'input_audio',
@@ -156,11 +156,11 @@ export async function handleAnalyzeAudio(
         format: format
       }
     });
-    
+
     // Select model
     let model = args.model || defaultModel || DEFAULT_AUDIO_MODEL;
     console.error(`[Audio Tool] Using AUDIO model: ${model}`);
-    
+
     // Try primary model first
     try {
       const completion = await openai.chat.completions.create({
@@ -170,20 +170,20 @@ export async function handleAnalyzeAudio(
           content
         }] as any
       });
-      
+
       const response = completion as any;
       return {
         content: [
           {
             type: 'text',
-            text: completion.choices[0].message.content || '',
+            text: JSON.stringify({
+              id: response.id,
+              analysis: completion.choices[0].message.content || '',
+              model: response.model,
+              usage: response.usage
+            }),
           },
         ],
-        metadata: {
-          id: response.id,
-          model: response.model,
-          usage: response.usage
-        }
       };
     } catch (primaryError: any) {
       // Try backup model
@@ -197,20 +197,20 @@ export async function handleAnalyzeAudio(
               content
             }] as any
           });
-          
+
           const resp = completion as any;
           return {
             content: [
               {
                 type: 'text',
-                text: completion.choices[0].message.content || '',
+                text: JSON.stringify({
+                  id: resp.id,
+                  analysis: completion.choices[0].message.content || '',
+                  model: resp.model,
+                  usage: resp.usage
+                }),
               },
             ],
-            metadata: {
-              id: resp.id,
-              model: resp.model,
-              usage: resp.usage
-            }
           };
         } catch (backupError: any) {
           // Try free audio model
@@ -223,20 +223,20 @@ export async function handleAnalyzeAudio(
                 content
               }] as any
             });
-            
+
             const resp = completion as any;
             return {
               content: [
                 {
                   type: 'text',
-                  text: completion.choices[0].message.content || '',
+                  text: JSON.stringify({
+                    id: resp.id,
+                    analysis: completion.choices[0].message.content || '',
+                    model: resp.model,
+                    usage: resp.usage
+                  }),
                 },
               ],
-              metadata: {
-                id: resp.id,
-                model: resp.model,
-                usage: resp.usage
-              }
             };
           } else {
             throw backupError;
@@ -253,20 +253,20 @@ export async function handleAnalyzeAudio(
               content
             }] as any
           });
-          
+
           const resp = completion as any;
           return {
             content: [
               {
                 type: 'text',
-                text: completion.choices[0].message.content || '',
+                text: JSON.stringify({
+                  id: resp.id,
+                  analysis: completion.choices[0].message.content || '',
+                  model: resp.model,
+                  usage: resp.usage
+                }),
               },
             ],
-            metadata: {
-              id: resp.id,
-              model: resp.model,
-              usage: resp.usage
-            }
           };
         } else {
           throw primaryError;
@@ -277,19 +277,19 @@ export async function handleAnalyzeAudio(
     if (error instanceof McpError) {
       throw error;
     }
-    
+
     return {
       content: [
         {
           type: 'text',
-          text: `Error analyzing audio: ${error instanceof Error ? error.message : String(error)}`,
+          text: JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+            model: request.params.arguments.model || defaultModel || DEFAULT_AUDIO_MODEL,
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+          }),
         },
       ],
       isError: true,
-      metadata: {
-        error_type: error instanceof Error ? error.constructor.name : 'Unknown',
-        error_message: error instanceof Error ? error.message : String(error)
-      }
     };
   }
 }
